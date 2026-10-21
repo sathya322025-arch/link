@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Inventory - Remote Device Access</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+  <nav class="navbar">
+    <a href="/admin" class="brand">
+      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      SecureSupport
+      <span class="brand-badge">ADMIN</span>
+    </a>
+    <div class="nav-links">
+      <a href="/admin" class="nav-link">Dashboard</a>
+      <a href="/admin/devices" class="nav-link active">Devices</a>
+      <a href="/admin/audit" class="nav-link">Audit Logs</a>
+      <a href="/admin/settings" class="nav-link">Policies</a>
+      <span id="adminName" style="color: #60a5fa; font-size: 0.85rem; font-weight: 600; margin-left: 1rem;">Admin</span>
+      <button onclick="logout()" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+      <div>
+        <h1 style="font-size: 1.75rem; font-weight: 700;">Managed Device Inventory</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Enrolled enterprise endpoints, telemetry, and background agent status</p>
+      </div>
+      <button onclick="generateEnrollmentToken()" class="btn btn-primary">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+        Enroll New Device
+      </button>
+    </div>
+
+    <!-- Devices Table -->
+    <div class="card">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Hostname</th>
+              <th>Identifier</th>
+              <th>OS / Platform</th>
+              <th>IP Address</th>
+              <th>Managed Type</th>
+              <th>Last Heartbeat</th>
+            </tr>
+          </thead>
+          <tbody id="devicesTableBody">
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-muted);">Loading registered devices...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/js/admin.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", async () => {
+      await checkAuth();
+      await loadDevices();
+    });
+
+    async function loadDevices() {
+      try {
+        const res = await fetch("/api/v1/devices", { headers: getAuthHeader() });
+        const devices = await res.json();
+        const tbody = document.getElementById("devicesTableBody");
+
+        if (devices.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:2rem;">No devices currently registered.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = devices.map(d => `
+          <tr>
+            <td>
+              <span class="badge ${d.is_online ? 'badge-online' : 'badge-offline'}">
+                <span class="badge-pulse"></span>
+                ${d.is_online ? 'ONLINE' : 'OFFLINE'}
+              </span>
+            </td>
+            <td><strong>${d.hostname}</strong></td>
+            <td><code style="font-size:0.8rem; background:#0f172a; padding:0.2rem 0.4rem; border-radius:4px;">${d.device_identifier}</code></td>
+            <td>${d.os_type.toUpperCase()} ${d.os_version || ''}</td>
+            <td>${d.ip_address || '---'}</td>
+            <td>${d.is_managed ? '<span style="color:#60a5fa;">Company Enrolled</span>' : 'Ad-hoc Guest'}</td>
+            <td>${d.last_heartbeat_at ? new Date(d.last_heartbeat_at).toLocaleTimeString() : 'Never'}</td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        console.error("Failed to load devices", err);
+      }
+    }
+
+    async function generateEnrollmentToken() {
+      try {
+        const res = await fetch("/api/v1/devices/enrollment-token", {
+          method: "POST",
+          headers: getAuthHeader()
+        });
+        const data = await res.json();
+        alert(`Enrollment Token Generated:\n\n${data.enrollment_token}\n\nValid for 24 hours. Run on client: python device_agent.py --enroll ${data.enrollment_token}`);
+      } catch (err) {
+        alert("Failed to generate token");
+      }
+    }
+  </script>
+</body>
+</html>
+

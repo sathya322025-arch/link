@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login - Secure Remote Support</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body style="align-items: center; justify-content: center;">
+
+  <div class="card" style="width: 100%; max-width: 420px; padding: 2.5rem;">
+    <div style="text-align: center; margin-bottom: 2rem;">
+      <div style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 12px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; margin-bottom: 1rem;">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+      </div>
+      <h2 style="font-size: 1.5rem; font-weight: 700;">Administrator Portal</h2>
+      <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;">Secure Remote Device Support System</p>
+    </div>
+
+    <div id="errorAlert" style="display: none; background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.4); color: #f87171; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.85rem; margin-bottom: 1.25rem;"></div>
+
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label class="form-label" for="email">Admin Email</label>
+        <input type="email" id="email" class="form-input" required placeholder="admin@support.local" value="admin@support.local">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input type="password" id="password" class="form-input" required placeholder="••••••••••••" value="Admin@Secure2026!">
+      </div>
+
+      <div class="form-group" id="totpGroup" style="display: none;">
+        <label class="form-label" for="totp">MFA Authenticator Code</label>
+        <input type="text" id="totp" class="form-input" placeholder="6-digit TOTP code" maxlength="6">
+      </div>
+
+      <button type="submit" id="loginBtn" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem; padding: 0.75rem;">
+        Sign In
+      </button>
+    </form>
+    
+    <div style="margin-top: 1.5rem; text-align: center; font-size: 0.75rem; color: var(--text-muted);">
+      Protected with Rate Limiting, Audit Logging & DTLS-SRTP
+    </div>
+  </div>
+
+  <script>
+    async function handleLogin(e) {
+      e.preventDefault();
+      const errEl = document.getElementById("errorAlert");
+      errEl.style.display = "none";
+
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const totp = document.getElementById("totp").value;
+
+      try {
+        const res = await fetch("/api/v1/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            totp_code: totp || null
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || "Authentication failed");
+        }
+
+        if (data.mfa_required) {
+          document.getElementById("totpGroup").style.display = "block";
+          document.getElementById("totp").focus();
+          errEl.style.display = "block";
+          errEl.style.backgroundColor = "rgba(59, 130, 246, 0.2)";
+          errEl.style.borderColor = "rgba(59, 130, 246, 0.4)";
+          errEl.style.color = "#93c5fd";
+          errEl.textContent = "Please enter your 6-digit MFA authenticator code.";
+          return;
+        }
+
+        localStorage.setItem("admin_access_token", data.access_token);
+        window.location.href = "/admin";
+
+      } catch (err) {
+        errEl.style.display = "block";
+        errEl.style.backgroundColor = "rgba(239, 68, 68, 0.2)";
+        errEl.style.borderColor = "rgba(239, 68, 68, 0.4)";
+        errEl.style.color = "#f87171";
+        errEl.textContent = err.message;
+      }
+    }
+  </script>
+</body>
+</html>
+

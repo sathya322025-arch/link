@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Remote Device Access</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <a href="/admin" class="brand">
+      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      SecureSupport
+      <span class="brand-badge">ADMIN</span>
+    </a>
+    <div class="nav-links">
+      <a href="/admin" class="nav-link active">Dashboard</a>
+      <a href="/admin/devices" class="nav-link">Devices</a>
+      <a href="/admin/audit" class="nav-link">Audit Logs</a>
+      <a href="/admin/settings" class="nav-link">Policies</a>
+      <span id="adminName" style="color: #60a5fa; font-size: 0.85rem; font-weight: 600; margin-left: 1rem;">Admin</span>
+      <button onclick="logout()" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Logout</button>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+      <div>
+        <h1 style="font-size: 1.75rem; font-weight: 700;">Live Support Operations</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Real-time screen monitoring and authorized remote assistance</p>
+      </div>
+      <button onclick="openInviteModal()" class="btn btn-primary">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+        Generate Access Link
+      </button>
+    </div>
+
+    <!-- Metrics -->
+    <div class="grid-cards">
+      <div class="card">
+        <div class="card-title">Active Live Sessions</div>
+        <div class="card-value" id="metricActiveSessions">0</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Online Managed Devices</div>
+        <div class="card-value" id="metricOnlineDevices" style="color: #34d399;">0</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Total Enrolled Devices</div>
+        <div class="card-value" id="metricManagedDevices">0</div>
+      </div>
+      <div class="card">
+        <div class="card-title">WebRTC Relay Health</div>
+        <div class="card-value" style="font-size: 1.25rem; color: #60a5fa; margin-top: 0.5rem;">STUN / TURN Active</div>
+      </div>
+    </div>
+
+    <!-- Active Sessions Table -->
+    <div class="card" style="padding: 1.5rem;">
+      <h2 style="font-size: 1.15rem; font-weight: 600; margin-bottom: 1rem;">Active Live Sessions</h2>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Session Code</th>
+              <th>Target User</th>
+              <th>Device</th>
+              <th>Status</th>
+              <th>Duration</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsTableBody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted);">Loading active sessions...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Create Access Link Modal -->
+  <div id="inviteModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+        <h3 style="font-size: 1.25rem; font-weight: 700;">Create Secure Access Link</h3>
+        <button onclick="closeInviteModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">&times;</button>
+      </div>
+
+      <form id="inviteForm" onsubmit="submitInvite(event)">
+        <div class="form-group">
+          <label class="form-label" for="invitePurpose">Session Purpose (Visible to User)</label>
+          <input type="text" id="invitePurpose" class="form-input" required placeholder="e.g. Diagnostic of Outlook email sync failure">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="inviteEmail">Target User Email (Optional)</label>
+          <input type="email" id="inviteEmail" class="form-input" placeholder="user@company.com">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="inviteTTL">Link Expiration (Single-Use)</label>
+          <select id="inviteTTL" class="form-select">
+            <option value="15">15 Minutes (Recommended)</option>
+            <option value="30">30 Minutes</option>
+            <option value="60">1 Hour</option>
+            <option value="120">2 Hours</option>
+          </select>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+          <button type="button" onclick="closeInviteModal()" class="btn btn-secondary">Cancel</button>
+          <button type="submit" class="btn btn-primary">Generate Link</button>
+        </div>
+      </form>
+
+      <div id="inviteResult" style="display: none;">
+        <p style="font-size: 0.875rem; color: #34d399; margin-bottom: 0.75rem;">
+          ✓ Cryptographically secure single-use invitation generated!
+        </p>
+        <div class="form-group">
+          <label class="form-label">Shareable Link</label>
+          <input type="text" id="generatedLink" class="form-input" readonly>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+          <button type="button" onclick="copyGeneratedLink()" class="btn btn-primary">Copy Link</button>
+          <button type="button" onclick="closeInviteModal()" class="btn btn-secondary">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/admin.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", async () => {
+      await checkAuth();
+      await loadDashboardMetrics();
+      // Poll active sessions every 5 seconds
+      setInterval(loadDashboardMetrics, 5000);
+    });
+  </script>
+</body>
+</html>
+

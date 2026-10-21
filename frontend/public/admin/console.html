@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Support Console - Secure Remote Support</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body style="height: 100vh; overflow: hidden;">
+
+  <!-- Minimal Header -->
+  <header style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 0.5rem 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="/admin" class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;">
+        &larr; Exit Console
+      </a>
+      <span style="font-weight: 700; font-size: 1rem;">Support Console: <span id="sessionCodeTitle" style="color: #60a5fa;">---</span></span>
+      <span id="sessionStatusBadge" class="badge badge-online">
+        <span class="badge-pulse"></span>
+        CONNECTING
+      </span>
+    </div>
+
+    <!-- Live Toolbar -->
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <button id="btnToolPointer" onclick="setTool('pointer')" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+        Laser Pointer
+      </button>
+      <button id="btnToolPen" onclick="setTool('pen')" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+        Telestrator Pen
+      </button>
+      <button onclick="clearCanvas()" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+        Clear Drawings
+      </button>
+      <button id="btnPause" onclick="togglePause()" class="btn btn-warning" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+        Pause Stream
+      </button>
+      <button onclick="terminateCurrentSession()" class="btn btn-danger" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+        End Session
+      </button>
+    </div>
+  </header>
+
+  <!-- Console Main Content -->
+  <div style="display: grid; grid-template-columns: 1fr 320px; height: calc(100vh - 54px);">
+    
+    <!-- Video / Screen Canvas Area -->
+    <div class="screen-container" id="screenWrapper">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <canvas id="drawCanvas"></canvas>
+      <div id="laserPointer" class="laser-pointer" style="display: none;"></div>
+
+      <div id="waitingPlaceholder" style="position: absolute; text-align: center; color: var(--text-muted);">
+        <div class="badge-pulse" style="width: 16px; height: 16px; margin: 0 auto 1rem auto; background-color: #3b82f6;"></div>
+        <h3 style="font-size: 1.15rem; color: var(--text-main); margin-bottom: 0.5rem;">Waiting for Remote Screen Stream...</h3>
+        <p style="font-size: 0.85rem;">The client is currently confirming browser permissions.</p>
+      </div>
+    </div>
+
+    <!-- Sidebar: Telemetry & Support Chat -->
+    <div style="background-color: var(--bg-secondary); border-left: 1px solid var(--border-color); display: flex; flex-direction: column;">
+      
+      <!-- Telemetry Box -->
+      <div style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+        <h4 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.75rem;">
+          WebRTC Real-Time Telemetry
+        </h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem;">
+          <div>FPS: <strong id="statFps" style="color: #34d399;">0</strong></div>
+          <div>RTT: <strong id="statRtt" style="color: #60a5fa;">0 ms</strong></div>
+          <div>Packets Lost: <strong id="statLost">0</strong></div>
+          <div>Encryption: <strong style="color: #34d399;">DTLS-SRTP</strong></div>
+        </div>
+      </div>
+
+      <!-- Chat Box -->
+      <div style="flex: 1; display: flex; flex-direction: column; padding: 1rem; overflow: hidden;">
+        <h4 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem;">
+          Technical Support Chat
+        </h4>
+        <div id="adminChatBox" style="flex: 1; background: #0f172a; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.75rem; overflow-y: auto; font-size: 0.85rem; margin-bottom: 0.75rem;">
+          <p style="color: var(--text-muted); font-size: 0.75rem;">Session initialized. Messages sent here appear on the user's screen.</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <input type="text" id="adminChatInput" class="form-input" placeholder="Type instructions..." onkeydown="if(event.key==='Enter') sendAdminChat()">
+          <button onclick="sendAdminChat()" class="btn btn-primary" style="padding: 0.4rem 0.8rem;">Send</button>
+        </div>
+      </div>
+
+      <!-- Privacy Notice -->
+      <div style="padding: 0.75rem 1rem; background: #0f172a; border-top: 1px solid var(--border-color); font-size: 0.7rem; color: var(--text-muted);">
+        🛡️ Policy: Zero persistent recording. Consent confirmed by client.
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/webrtc_helper.js"></script>
+  <script src="/static/js/canvas_tools.js"></script>
+  <script src="/static/js/admin.js"></script>
+  <script>
+    let rtcManager = null;
+    let canvasTools = null;
+    let sessionCode = null;
+    let isPaused = false;
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      await checkAuth();
+
+      const params = new URLSearchParams(window.location.search);
+      sessionCode = params.get("code");
+      if (!sessionCode) {
+        alert("Missing session code");
+        window.location.href = "/admin";
+        return;
+      }
+
+      document.getElementById("sessionCodeTitle").textContent = sessionCode;
+
+      // Initialize Canvas Telestrator Tools
+      const canvasEl = document.getElementById("drawCanvas");
+      canvasTools = new RemoteCanvasTools(
+        canvasEl,
+        (stroke) => {
+          if (rtcManager) rtcManager.sendSignal(stroke);
+        },
+        (pointer) => {
+          if (rtcManager) rtcManager.sendSignal({ type: "pointer", ...pointer });
+        }
+      );
+
+      // Fetch TURN/STUN configuration
+      const iceRes = await fetch("/api/v1/sessions/ice-servers", { headers: getAuthHeader() });
+      const iceData = await iceRes.json();
+
+      // Connect WebRTC
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${window.location.host}/ws/signaling/${sessionCode}`;
+
+      rtcManager = new WebRTCManager({
+        role: "admin",
+        sessionCode: sessionCode,
+        iceServers: iceData.ice_servers,
+        onRemoteStream: (stream) => {
+          console.log("Remote stream received in admin console");
+          document.getElementById("waitingPlaceholder").style.display = "none";
+          const video = document.getElementById("remoteVideo");
+          video.srcObject = stream;
+          canvasTools.resizeCanvas();
+        },
+        onConnectionStateChange: (state) => {
+          const badge = document.getElementById("sessionStatusBadge");
+          badge.textContent = state.toUpperCase();
+          if (state === "connected") {
+            badge.className = "badge badge-active";
+          } else if (state === "paused") {
+            badge.className = "badge badge-paused";
+          } else if (state === "ended" || state === "disconnected") {
+            badge.className = "badge badge-ended";
+          }
+        },
+        onDataMessage: (data) => {
+          if (data.type === "chat") {
+            addAdminChatMessage("Client", data.text);
+          }
+        }
+      });
+
+      await rtcManager.connectSignaling(wsUrl);
+
+      // Monitor stats
+      rtcManager.startStatsMonitor((stats) => {
+        document.getElementById("statFps").textContent = stats.fps;
+        document.getElementById("statRtt").textContent = `${stats.rttMs} ms`;
+        document.getElementById("statLost").textContent = stats.packetsLost;
+      });
+    });
+
+    function setTool(mode) {
+      canvasTools.setMode(mode);
+      document.getElementById("btnToolPointer").className = mode === "pointer" ? "btn btn-primary" : "btn btn-secondary";
+      document.getElementById("btnToolPen").className = mode === "pen" ? "btn btn-primary" : "btn btn-secondary";
+    }
+
+    function clearCanvas() {
+      canvasTools.clear();
+      if (rtcManager) rtcManager.sendSignal({ type: "clear_canvas" });
+    }
+
+    function togglePause() {
+      isPaused = !isPaused;
+      const btn = document.getElementById("btnPause");
+      if (isPaused) {
+        btn.textContent = "Resume Stream";
+        rtcManager.sendSignal({ type: "session_pause" });
+      } else {
+        btn.textContent = "Pause Stream";
+        rtcManager.sendSignal({ type: "session_resume" });
+      }
+    }
+
+    function terminateCurrentSession() {
+      if (confirm("Are you sure you want to terminate this support session?")) {
+        rtcManager.sendSignal({
+          type: "session_terminate",
+          reason: "Administrator terminated session"
+        });
+        setTimeout(() => {
+          window.location.href = "/admin";
+        }, 500);
+      }
+    }
+
+    function sendAdminChat() {
+      const input = document.getElementById("adminChatInput");
+      const text = input.value.trim();
+      if (!text || !rtcManager) return;
+      rtcManager.sendSignal({ type: "chat", text });
+      addAdminChatMessage("You", text);
+      input.value = "";
+    }
+
+    function addAdminChatMessage(sender, text) {
+      const box = document.getElementById("adminChatBox");
+      const p = document.createElement("p");
+      p.style.marginBottom = "0.4rem";
+      p.innerHTML = `<strong>${sender}:</strong> <span>${escapeHtml(text)}</span>`;
+      box.appendChild(p);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
+

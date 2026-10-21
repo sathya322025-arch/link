@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remote Support Authorization</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body style="align-items: center; justify-content: center; padding: 1.5rem;">
+
+  <!-- Floating Active Session Banner (Displayed when screen sharing is active) -->
+  <div id="floatingBanner" class="screen-sharing-banner" style="display: none;">
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <span class="badge-pulse" style="background-color: #ef4444;"></span>
+      <span style="font-weight: 700; color: #fff; font-size: 0.95rem;">LIVE SCREEN SUPPORT ACTIVE</span>
+      <span style="color: var(--text-muted); font-size: 0.85rem;">(<span id="sessionCodeDisplay">---</span>)</span>
+    </div>
+    <button onclick="terminateSession('User clicked Stop Sharing button')" class="btn btn-danger" style="padding: 0.4rem 1rem; font-size: 0.8rem; border-radius: 9999px;">
+      Stop Sharing Screen
+    </button>
+  </div>
+
+  <!-- Virtual Laser Pointer Element overlayed on client viewport -->
+  <div id="clientLaserPointer" class="laser-pointer" style="display: none;"></div>
+
+  <!-- Main Card Container -->
+  <div class="card" style="width: 100%; max-width: 580px; padding: 2.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);">
+
+    <!-- 1. Loading State -->
+    <div id="loadingCard" style="text-align: center; padding: 2rem 0;">
+      <div class="badge-pulse" style="width: 20px; height: 20px; margin: 0 auto 1.5rem auto; background-color: #3b82f6;"></div>
+      <h2 style="font-size: 1.25rem; font-weight: 700;">Verifying Support Access Link...</h2>
+      <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">Checking token cryptographic authenticity and expiration</p>
+    </div>
+
+    <!-- 2. Error State -->
+    <div id="errorCard" style="display: none; text-align: center; padding: 1rem 0;">
+      <div style="display: inline-flex; width: 56px; height: 56px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); color: #f87171; align-items: center; justify-content: center; margin-bottom: 1rem;">
+        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      </div>
+      <h2 style="font-size: 1.35rem; font-weight: 700; color: #f87171; margin-bottom: 0.5rem;">Invalid or Expired Link</h2>
+      <p id="errorMessage" style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;"></p>
+      <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem; font-size: 0.8rem; color: var(--text-muted);">
+        For security, remote support links are single-use and expire quickly. Please request a new link from your technical administrator.
+      </div>
+    </div>
+
+    <!-- 3. Explicit Consent State -->
+    <div id="consentCard" style="display: none;">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <div style="display: inline-flex; width: 48px; height: 48px; border-radius: 12px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; align-items: center; justify-content: center; margin-bottom: 0.75rem;">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        </div>
+        <h2 style="font-size: 1.4rem; font-weight: 700;">Remote Support Request</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">An authorized technician is requesting to assist you</p>
+      </div>
+
+      <!-- Session Parameters -->
+      <div style="background-color: #0f172a; border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="margin-bottom: 0.75rem;">
+          <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Technician:</span>
+          <div id="adminNameDisplay" style="font-weight: 600; color: #60a5fa; margin-top: 0.15rem;"></div>
+        </div>
+        <div>
+          <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Stated Purpose:</span>
+          <div id="purposeDisplay" style="color: var(--text-main); font-size: 0.9rem; margin-top: 0.15rem;"></div>
+        </div>
+      </div>
+
+      <!-- Transparency & Privacy Disclosures -->
+      <div style="background-color: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 0.75rem; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.8rem; color: #a7f3d0; line-height: 1.6;">
+        <strong style="display: block; margin-bottom: 0.25rem; color: #34d399;">🔒 Privacy & Authorization Guarantees:</strong>
+        • Your camera and microphone will <strong>NEVER</strong> be accessed.<br>
+        • No files or passwords can be accessed without your explicit knowledge.<br>
+        • A visible indicator remains active throughout the entire session.<br>
+        • You maintain full control and can terminate screen sharing at any moment.
+      </div>
+
+      <button id="btnAuthorize" class="btn btn-primary" style="width: 100%; padding: 0.85rem; font-size: 1rem;">
+        Authorize and Share Screen
+      </button>
+    </div>
+
+    <!-- 4. Active Sharing State -->
+    <div id="activeCard" style="display: none;">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <span class="badge badge-active" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; margin-bottom: 1rem;">
+          <span class="badge-pulse"></span>
+          SCREEN SHARING IN PROGRESS
+        </span>
+        <h2 style="font-size: 1.35rem; font-weight: 700;">Support Technician Connected</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">The technician can now see your selected screen or window in real-time</p>
+      </div>
+
+      <!-- Chat with Technician -->
+      <div style="background: #0f172a; border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem; margin-bottom: 1.5rem;">
+        <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">
+          Live Chat with Technician
+        </div>
+        <div id="clientChatBox" style="height: 140px; overflow-y: auto; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem; margin-bottom: 0.75rem; background: rgba(0,0,0,0.2);"></div>
+        <div style="display: flex; gap: 0.5rem;">
+          <input type="text" id="clientChatInput" class="form-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendClientChat()">
+          <button onclick="sendClientChat()" class="btn btn-primary" style="padding: 0.4rem 0.8rem;">Send</button>
+        </div>
+      </div>
+
+      <button onclick="terminateSession('User clicked Stop Sharing')" class="btn btn-danger" style="width: 100%; padding: 0.75rem;">
+        Disconnect Support Session
+      </button>
+    </div>
+
+  </div>
+
+  <script src="/static/js/webrtc_helper.js"></script>
+  <script src="/static/js/client.js"></script>
+</body>
+</html>
+

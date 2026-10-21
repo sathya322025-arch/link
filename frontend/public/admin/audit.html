@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audit Logs - Remote Device Access</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+  <nav class="navbar">
+    <a href="/admin" class="brand">
+      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      SecureSupport
+      <span class="brand-badge">ADMIN</span>
+    </a>
+    <div class="nav-links">
+      <a href="/admin" class="nav-link">Dashboard</a>
+      <a href="/admin/devices" class="nav-link">Devices</a>
+      <a href="/admin/audit" class="nav-link active">Audit Logs</a>
+      <a href="/admin/settings" class="nav-link">Policies</a>
+      <span id="adminName" style="color: #60a5fa; font-size: 0.85rem; font-weight: 600; margin-left: 1rem;">Admin</span>
+      <button onclick="logout()" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div style="margin-bottom: 2rem;">
+      <h1 style="font-size: 1.75rem; font-weight: 700;">Immutable Security & Audit Ledger</h1>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">Cryptographic audit trail of all logins, invitations, consents, and live screen sessions</p>
+    </div>
+
+    <!-- Audit Table -->
+    <div class="card">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Actor Type</th>
+              <th>Resource</th>
+              <th>IP Address</th>
+              <th>Event Details</th>
+            </tr>
+          </thead>
+          <tbody id="auditTableBody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted);">Loading audit entries...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/js/admin.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", async () => {
+      await checkAuth();
+      await loadAuditLogs();
+    });
+
+    async function loadAuditLogs() {
+      try {
+        const res = await fetch("/api/v1/audit-logs?limit=50", { headers: getAuthHeader() });
+        const logs = await res.json();
+        const tbody = document.getElementById("auditTableBody");
+
+        if (logs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">No audit logs recorded yet.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = logs.map(l => `
+          <tr>
+            <td style="white-space:nowrap; font-size:0.8rem; color:var(--text-muted);">${new Date(l.created_at).toLocaleString()}</td>
+            <td><strong style="color:#60a5fa;">${l.action}</strong></td>
+            <td><span class="badge" style="background:#334155;">${l.actor_type.toUpperCase()}</span></td>
+            <td>${l.resource_type} ${l.resource_id ? '(' + l.resource_id.substring(0,8) + '...)' : ''}</td>
+            <td><code>${l.ip_address || '---'}</code></td>
+            <td style="font-size:0.8rem; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              ${JSON.stringify(l.details)}
+            </td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        console.error("Failed to load audit logs", err);
+      }
+    }
+  </script>
+</body>
+</html>
+
